@@ -19,10 +19,6 @@ module.exports = function (RED) {
   const pg = require('pg');
   const aedes = require('aedes');
   const net = require('net');
-  const tls = require('tls');
-  const http = require('http');
-  const https = require('https');
-  const ws = require('websocket-stream');
 
   function AedesBrokerNode (config) {
     RED.nodes.createNode(this, config);
@@ -40,14 +36,14 @@ module.exports = function (RED) {
       idleTimeoutMillis: 30000
     };
     if(process.env.AEDES_PGSQL_USETLS !== undefined && process.env.AEDES_PGSQL_USETLS == "true"){
-      config.ssl = {
+      db_config.ssl = {
         rejectUnauthorized: false
       }
     }
 
     this.pgpool = new pg.Pool(db_config);
-
     const node = this;
+
 
     const aedesSettings = {};
 
@@ -72,10 +68,22 @@ module.exports = function (RED) {
     }
 
     const authenticate = function (client, username, password, callback) {
-      // var authorized = (username === node.username && password.toString() === node.password);
-      var authorized = true;
-      if (authorized) { client.user = username; }
-      callback(null, authorized);
+      if(username===null || username === undefined || JSON.stringify(username).includes(" ")){
+        callback(null, false);
+        return;
+      }
+      var query = "SELECT accesskey from gatewayusers where gatewayuser="+"'"+username+"'";
+      node.pgpool.query(query, (err, res) => {
+        if(res !== null && res !== undefined && res.rows.length == 1){
+          // console.warn("---"+typeof(password));
+          // console.warn("---"+typeof(res.rows[0].accesskey));
+          var authorized = (password == res.rows[0].accesskey);
+          if (authorized) { client.user = username; }
+          callback(null, authorized);
+        }else{
+          callback(null, false);
+        }
+      });
     };
 
     broker.authenticate = authenticate;
@@ -171,24 +179,27 @@ module.exports = function (RED) {
       node.send(msg);
     });
 
-    /*
     broker.on('publish', function (packet, client) {
       var msg = {
         topic: 'publish',
-        payload: {
+        payload:  {
           packet: packet,
-          client: client
+          // client: client
         }
       };
+      if(client!=null){
+        msg.payload.clientid=client.id;
+        msg.payload.username=client.user;
+      }      
       node.send(msg);
     });
-     */
 
     broker.on('closed', function () {
       node.debug('Closed event');
     });
 
     this.on('close', function (done) {
+      node.pgpool.end();
       broker.close(function () {
         node.log('Unbinding aedes mqtt server on port '+ mqtt_config.mqtt_port );
         server.close(function () {
