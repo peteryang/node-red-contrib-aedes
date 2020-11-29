@@ -191,8 +191,10 @@ module.exports = function (RED) {
       if(client!=null){
         msg.payload.clientid=client.id;
         msg.payload.username=client.user;
-      }      
-      node.send(msg);
+          if(packet.topic.includes("/api/gateway/"+client.user)){
+            node.send(msg);
+          }
+        }
     });
 
     broker.on('closed', function () {
