@@ -7,7 +7,7 @@ const should = require('should');
 
 helper.init(require.resolve('node-red'));
 
-describe('Aedes Broker Last Will tests', function () {
+describe('aedes-iot-broker Last Will tests', function () {
   beforeEach(function (done) {
     helper.startServer(done);
   });
@@ -20,7 +20,7 @@ describe('Aedes Broker Last Will tests', function () {
   it('should be loaded', function (done) {
     const flow = [{
       id: 'n1',
-      type: 'aedes broker',
+      type: 'aedes-iot-broker',
       mqtt_port: '1883',
       name: 'Aedes 1883'
     }];
@@ -36,7 +36,7 @@ describe('Aedes Broker Last Will tests', function () {
     const flow = [
       {
         id: 'n1',
-        type: 'aedes broker',
+        type: 'aedes-iot-broker',
         mqtt_port: '1883',
         name: 'Aedes 1883',
         wires: [

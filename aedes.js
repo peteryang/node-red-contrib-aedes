@@ -24,7 +24,8 @@ module.exports = function (RED) {
     RED.nodes.createNode(this, config);
     this.mqtt_port = parseInt(process.env.AEDES_MQTT_PORT);
     var mqtt_config = {
-      mqtt_port: parseInt(process.env.AEDES_MQTT_PORT)
+      mqtt_port: parseInt(process.env.AEDES_MQTT_PORT),
+      mqtt_accesskey_query: process.env.AEDES_MQTT_ACCESSKEY_QUERY
     };
 
     var db_config = {
@@ -72,7 +73,7 @@ module.exports = function (RED) {
         callback(null, false);
         return;
       }
-      var query = "SELECT accesskey from gatewayusers where gatewayuser="+"'"+username+"'";
+      var query = mqtt_config.mqtt_accesskey_query.replace("{1}", username);
       node.pgpool.query(query, (err, res) => {
         if(res !== null && res !== undefined && res.rows.length == 1){
           // console.warn("---"+typeof(password));
@@ -210,5 +211,5 @@ module.exports = function (RED) {
     });
   }
 
-  RED.nodes.registerType('aedes broker', AedesBrokerNode, { });
+  RED.nodes.registerType('aedes-iot-broker', AedesBrokerNode, { });
 };

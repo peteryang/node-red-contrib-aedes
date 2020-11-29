@@ -7,7 +7,7 @@ const mqtt = require('mqtt/mqtt.js');
 
 helper.init(require.resolve('node-red'));
 
-describe('Aedes Broker Websocket tests', function () {
+describe('aedes-iot-broker Websocket tests', function () {
   beforeEach(function (done) {
     helper.startServer(done);
   });
@@ -23,13 +23,13 @@ describe('Aedes Broker Websocket tests', function () {
     helper.load([aedesNode, mqttNode], [
       {
         id: 'n1',
-        type: 'aedes broker',
+        type: 'aedes-iot-broker',
         mqtt_port: '1883',
         name: 'Aedes 1883',
         mqtt_ws_port: '8080'
       }, {
         id: 'n11',
-        type: 'aedes broker',
+        type: 'aedes-iot-broker',
         mqtt_port: '1884',
         name: 'Aedes 1884',
         mqtt_ws_port: '8080'
@@ -49,7 +49,7 @@ describe('Aedes Broker Websocket tests', function () {
     const flow = [
       {
         id: 'n1',
-        type: 'aedes broker',
+        type: 'aedes-iot-broker',
         mqtt_port: '1883',
         mqtt_ws_port: '8080',
         name: 'Aedes 1883',
