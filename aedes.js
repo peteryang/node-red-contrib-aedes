@@ -75,22 +75,10 @@ module.exports = function (RED) {
         return;
       }
       var query = mqtt_config.mqtt_accesskey_query.replace("{1}", username);
-      node.warn("------------------------1");
-      node.warn(query);
-      node.warn(username);
-      node.warn(password.toString());
       node.pgpool.query(query, (err, res) => {
         if(res !== null && res !== undefined && res.rows.length == 1){
-          node.warn("------------------------2");
-          node.warn(res.rows[0].accesskey);
-          node.warn("------------------------3");
-          console.warn("---"+typeof( password ));
-          console.warn("---"+typeof(res.rows[0].accesskey.trim()));
-          console.warn(JSON.stringify(password).trim().length);
-          console.warn(res.rows[0].accesskey.trim().length);
           var authorized = (password.toString().trim() === res.rows[0].accesskey.trim());
           if (authorized) { client.user = username; }
-          console.warn("authorized = "+authorized)
           callback(null, authorized);
         }else{
           callback(null, false);
@@ -133,7 +121,6 @@ module.exports = function (RED) {
     });
 
     broker.on('clientError', function (client, err) {
-      console.warn("---------->4");
       console.warn(err);
       const msg = {
         topic: 'clientError',
@@ -194,8 +181,6 @@ module.exports = function (RED) {
     });
 
     broker.on('publish', function (packet, client) {
-      node.warn("on publish is called");
-      node.warn("client="+client);
       var msg = {
         topic: 'publish',
         payload:  {
@@ -204,14 +189,6 @@ module.exports = function (RED) {
         }
       };
       if(client!=null && packet!= null){
-        node.warn("clientid="+client.id);
-        node.warn("username="+client.user);
-        node.warn("packet.topic="+packet.topic);
-        node.warn("============");
-        node.warn("packet.topic type ="+typeof(packet.topic));
-        node.warn("client.id type ="+typeof(client.id));
-        node.warn("client.user type ="+typeof(client.user));
-
         msg.payload.clientid=client.id;
         msg.payload.username=client.user;
           if(packet.topic.includes("/api/gateway/"+client.user)){
