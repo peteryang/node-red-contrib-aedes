@@ -19,12 +19,16 @@ module.exports = function (RED) {
   const pg = require('pg');
   const aedes = require('aedes');
   const net = require('net');
+  const http = require('http');
+  const ws = require('websocket-stream');
 
   function AedesBrokerNode (config) {
     RED.nodes.createNode(this, config);
     this.mqtt_port = parseInt(process.env.AEDES_MQTT_PORT);
+    this.mqtt_ws_port = parseInt(process.env.AEDES_MQTT_WS_PORT);
     var mqtt_config = {
       mqtt_port: parseInt(process.env.AEDES_MQTT_PORT),
+      mqtt_ws_port: parseInt(process.env.AEDES_MQTT_WS_PORT),
       mqtt_accesskey_query: process.env.AEDES_MQTT_ACCESSKEY_QUERY
     };
 
@@ -37,7 +41,7 @@ module.exports = function (RED) {
       connectionTimeoutMillis: 5000,
       idleTimeoutMillis: 30000
     };
-    if(process.env.AEDES_PGSQL_USETLS !== undefined && process.env.AEDES_PGSQL_USETLS == "true"){
+    if(process.env.AEDES_PGSQL_USETLS && process.env.AEDES_PGSQL_USETLS === "true"){
       db_config.ssl = {
         rejectUnauthorized: false
       }
@@ -51,6 +55,38 @@ module.exports = function (RED) {
 
     const broker = new aedes.Server(aedesSettings);
     let server = net.createServer(broker.handle);
+
+    let wss = null;
+    let httpServer = null;
+
+    if (this.mqtt_ws_port) {
+      // Awkward check since http or ws do not fire an error event in case the port is in use
+      const testServer = net.createServer();
+      testServer.once('error', function (err) {
+        if (err.code === 'EADDRINUSE') {
+          node.error('Error: Port ' + mqtt_config.mqtt_ws_port + ' is already in use');
+        } else {
+          node.error('Error creating net server on port ' + mqtt_config.mqtt_ws_port + ', ' + err.toString());
+        }
+      });
+      testServer.once('listening', function () {
+        testServer.close();
+      });
+
+      testServer.once('close', function () {
+        httpServer = http.createServer();
+        
+        wss = ws.createServer({
+            server: httpServer
+          }, broker.handle);
+        httpServer.listen(mqtt_config.mqtt_ws_port, function () {
+            node.log('Binding aedes mqtt server on ws port: ' + mqtt_config.mqtt_ws_port);
+          });
+        });
+      testServer.listen(mqtt_config.mqtt_ws_port, function () {
+        node.log('Checking ws port: ' + mqtt_config.mqtt_ws_port);
+      });
+    }
 
     server.once('error', function (err) {
       if (err.code === 'EADDRINUSE') {
@@ -70,13 +106,22 @@ module.exports = function (RED) {
     }
 
     const authenticate = function (client, username, password, callback) {
-      if(username===null || username === undefined || JSON.stringify(username).includes(" ")){
+      if(client && client.req && client.req.upgrade){
+        callback(null, true);
+        return;
+      }      
+      if(!username || username.trim().length === 0){
         callback(null, false);
         return;
       }
+      if(!password || password.toString().trim().length === 0){
+        callback(null, false);
+        return;
+      }      
+ 
       var query = mqtt_config.mqtt_accesskey_query.replace("{1}", username);
       node.pgpool.query(query, (err, res) => {
-        if(res !== null && res !== undefined && res.rows.length == 1){
+        if(res && res.rows && res.rows.length === 1){
           var authorized = (password.toString().trim() === res.rows[0].accesskey.trim());
           if (authorized) { client.user = username; }
           callback(null, authorized);
@@ -200,17 +245,29 @@ module.exports = function (RED) {
     broker.on('closed', function () {
       node.debug('Closed event');
     });
-
+    
     this.on('close', function (done) {
-      node.pgpool.end();
       broker.close(function () {
-        node.log('Unbinding aedes mqtt server on port '+ mqtt_config.mqtt_port );
+        node.log('Unbinding aedes mqtt server from port: ' + mqtt_config.mqtt_port);
+        node.pgpool.end();
         server.close(function () {
           node.debug('after server.close(): ');
-          done();
+          if (wss) {
+            node.log('Unbinding aedes mqtt server from ws port: ' + mqtt_config.mqtt_ws_port);
+            wss.close(function () {
+              node.debug('after wss.close(): ');
+              httpServer.close(function () {
+                node.debug('after httpServer.close(): ');
+                done();
+              });
+            });
+          } else {
+            done();
+          }
         });
       });
     });
+
   }
 
   RED.nodes.registerType('aedes-iot-broker', AedesBrokerNode, { });
