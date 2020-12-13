@@ -29,7 +29,8 @@ module.exports = function (RED) {
     var mqtt_config = {
       mqtt_port: parseInt(process.env.AEDES_MQTT_PORT),
       mqtt_ws_port: parseInt(process.env.AEDES_MQTT_WS_PORT),
-      mqtt_accesskey_query: process.env.AEDES_MQTT_ACCESSKEY_QUERY
+      mqtt_accesskey_query: process.env.AEDES_MQTT_ACCESSKEY_QUERY,
+      mqtt_roles_query: process.env.AEDES_MQTT_ROLES_QUERY
     };
 
     var db_config = {
@@ -59,7 +60,10 @@ module.exports = function (RED) {
     let wss = null;
     let httpServer = null;
 
+    console.warn("----------1 "+this.mqtt_ws_port);
+
     if (this.mqtt_ws_port) {
+      console.warn("----------2 "+this.mqtt_ws_port);
       // Awkward check since http or ws do not fire an error event in case the port is in use
       const testServer = net.createServer();
       testServer.once('error', function (err) {
@@ -106,32 +110,95 @@ module.exports = function (RED) {
     }
 
     const authenticate = function (client, username, password, callback) {
+      console.warn("client = "+client);
+      console.warn("username = "+username);
+      console.warn("password = "+password);
       if(client && client.req && client.req.upgrade){
+        console.warn("---------------websocket without checking");
         callback(null, true);
         return;
       }      
       if(!username || username.trim().length === 0){
+        console.warn("---------------username.trim()="+username.trim());
         callback(null, false);
         return;
       }
       if(!password || password.toString().trim().length === 0){
+        console.warn("---------------password.toString().trim()="+password.toString().trim());
         callback(null, false);
         return;
       }      
  
       var query = mqtt_config.mqtt_accesskey_query.replace("{1}", username);
+      console.warn("---------------query="+query);
+
       node.pgpool.query(query, (err, res) => {
+        console.warn("---------------query returned");
+
         if(res && res.rows && res.rows.length === 1){
+          console.warn("---------------query returned with single result");
           var authorized = (password.toString().trim() === res.rows[0].accesskey.trim());
           if (authorized) { client.user = username; }
           callback(null, authorized);
         }else{
+          console.warn("---------------query returned and cannot auth");
           callback(null, false);
         }
       });
     };
 
     broker.authenticate = authenticate;
+
+    const authorizePublishHandler = function (client, packet, callback) {
+      var query = mqtt_config.mqtt_roles_query.replace("{1}", client.user);
+      console.warn("---------------query="+query);
+
+      node.pgpool.query(query, (err, res) => {
+        console.warn("---------------query returned");
+
+        if(res && res.rows && res.rows.length === 1){
+          console.warn("---------------query returned with single result");
+          var roles = res.rows[0].roles;
+          if(roles && roles.includes("gatewayuser.writer")){
+            return callback(null);
+          }          
+          if(roles && roles.includes("gatewayuser.writer."+packet.topic.substring("/api/gateway/".length))) {
+            return callback(null);
+          }
+        } 
+        return callback(new Error('wrong topic'))
+      });
+    }
+    // (client: Client, packet: PublishPacket, callback: (error?: Error | null) => void) => void
+
+    const authorizeSubscribeHandler =function (client, subscription, callback) {
+      var query = mqtt_config.mqtt_roles_query.replace("{1}", client.user);
+      console.warn("---------------query="+query);
+
+      node.pgpool.query(query, (err, res) => {
+        console.warn("---------------query returned");
+
+        if(res && res.rows && res.rows.length === 1){
+          console.warn("---------------query returned with single result");
+          var roles = res.rows[0].roles;
+          if(roles && roles.includes("gatewayuser.reader")){
+            return callback(null, subscription);
+          }
+          if(roles && roles.includes("gatewayuser.reader."+subscription.topic.substring("/api/gateway/".length))) {
+            return callback(null, subscription)
+          }
+        } 
+        return callback(new Error('wrong topic'))
+      });
+    } 
+    // (client: Client, subscription: Subscription, callback: (error: Error | null, subscription?: Subscription | null) => void) => void
+  
+  
+
+    broker.authorizePublish =  authorizePublishHandler;
+    broker.authorizeSubscribe =  authorizeSubscribeHandler;
+
+
 
     broker.on('client', function (client) {
       const msg = {
