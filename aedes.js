@@ -292,22 +292,22 @@ module.exports = function (RED) {
       node.send(msg);
     });
 
-    broker.on('publish', function (packet, client) {
-      var msg = {
-        topic: 'publish',
-        payload:  {
-          packet: packet,
-          // client: client
-        }
-      };
-      if(client!=null && packet!= null){
-        msg.payload.clientid=client.id;
-        msg.payload.username=client.user;
-          if(packet.topic.includes("/api/gateway/"+client.user)){
-            node.send(msg);
-          }
-        }
-    });
+    // broker.on('publish', function (packet, client) {
+    //   var msg = {
+    //     topic: 'publish',
+    //     payload:  {
+    //       packet: packet,
+    //       // client: client
+    //     }
+    //   };
+    //   if(client!=null && packet!= null){
+    //     msg.payload.clientid=client.id;
+    //     msg.payload.username=client.user;
+    //       if(packet.topic.includes("/api/gateway/"+client.user)){
+    //         node.send(msg);
+    //       }
+    //     }
+    // });
 
     broker.on('closed', function () {
       node.debug('Closed event');
