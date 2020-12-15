@@ -30,7 +30,8 @@ module.exports = function (RED) {
       mqtt_port: parseInt(process.env.AEDES_MQTT_PORT),
       mqtt_ws_port: parseInt(process.env.AEDES_MQTT_WS_PORT),
       mqtt_accesskey_query: process.env.AEDES_MQTT_ACCESSKEY_QUERY,
-      mqtt_roles_query: process.env.AEDES_MQTT_ROLES_QUERY
+      mqtt_gatewayuser_roles_query: process.env.AEDES_MQTT_GATEWAYUSER_ROLES_QUERY,
+      mqtt_loginuser_roles_query: process.env.AEDES_MQTT_LOGINUSER_ROLES_QUERY,
     };
 
     var db_config = {
@@ -150,7 +151,7 @@ module.exports = function (RED) {
     broker.authenticate = authenticate;
 
     const authorizePublishHandler = function (client, packet, callback) {
-      var query = mqtt_config.mqtt_roles_query.replace("{1}", client.user);
+      var query = mqtt_config.mqtt_gatewayuser_roles_query.replace("{1}", client.user);
       console.warn("---------------query="+query);
 
       node.pgpool.query(query, (err, res) => {
@@ -172,24 +173,46 @@ module.exports = function (RED) {
     // (client: Client, packet: PublishPacket, callback: (error?: Error | null) => void) => void
 
     const authorizeSubscribeHandler =function (client, subscription, callback) {
-      var query = mqtt_config.mqtt_roles_query.replace("{1}", client.user);
-      console.warn("---------------query="+query);
-
-      node.pgpool.query(query, (err, res) => {
-        console.warn("---------------query returned");
-
-        if(res && res.rows && res.rows.length === 1){
-          console.warn("---------------query returned with single result");
-          var roles = res.rows[0].roles;
-          if(roles && roles.includes("gatewayuser.reader")){
-            return callback(null, subscription);
-          }
-          if(roles && roles.includes("gatewayuser.reader."+subscription.topic.substring("/api/gateway/".length))) {
-            return callback(null, subscription)
-          }
-        } 
+      if(!client.user){
+        var query = mqtt_config.mqtt_gatewayuser_roles_query.replace("{1}", client.user);        
+        console.warn("---------------query="+query);
+        node.pgpool.query(query, (err, res) => {
+          console.warn("---------------query returned");
+          if(res && res.rows && res.rows.length === 1){
+            console.warn("---------------query returned with single result");
+            var roles = res.rows[0].roles;
+            if(roles && roles.includes("gatewayuser.reader")){
+              return callback(null, subscription);
+            }
+            if(roles && roles.includes("gatewayuser.reader."+subscription.topic.substring("/api/gateway/".length))) {
+              return callback(null, subscription);
+            }
+          } 
+          return callback(new Error('wrong topic'));
+        });        
+      }else if(client && !client.user && client.req && client.req.headers && client.req.headers.access_token ){
+        var query = mqtt_config.mqtt_loginuser_roles_query.replace("{1}", JSON.parse(client.req.headers.access_token).email);
+        console.warn("---------------query="+query);
+        node.pgpool.query(query, (err, res) => {
+          console.warn("---------------query returned");
+          if(res && res.rows && res.rows.length === 1){
+            console.warn("---------------query returned with single result");
+            var roles = res.rows[0].roles;
+            if(roles && roles.includes("loginuser.viewer")){
+              return callback(null, subscription);
+            }
+            if(roles && roles.includes("loginuser.viewer."+subscription.topic.substring("/api/gateway/".length))) {
+              return callback(null, subscription);
+            }
+          } 
+          return callback(new Error('wrong topic'))
+        });           
+      } else{
         return callback(new Error('wrong topic'))
-      });
+      }
+
+
+
     } 
     // (client: Client, subscription: Subscription, callback: (error: Error | null, subscription?: Subscription | null) => void) => void
   
