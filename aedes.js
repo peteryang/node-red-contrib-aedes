@@ -151,29 +151,53 @@ module.exports = function (RED) {
     broker.authenticate = authenticate;
 
     const authorizePublishHandler = function (client, packet, callback) {
-      var query = mqtt_config.mqtt_gatewayuser_roles_query.replace("{1}", client.user);
-      console.warn("---------------query="+query);
-
-      node.pgpool.query(query, (err, res) => {
-        console.warn("---------------query returned");
-
-        if(res && res.rows && res.rows.length === 1){
-          console.warn("---------------query returned with single result");
-          var roles = res.rows[0].roles;
-          if(roles && roles.includes("gatewayuser.writer")){
-            return callback(null);
-          }          
-          if(roles && roles.includes("gatewayuser.writer."+packet.topic.substring("/api/gateway/".length))) {
-            return callback(null);
-          }
-        } 
+      if(client && client.user){
+        console.warn("---------------mqtt_config.mqtt_gatewayuser_roles_query="+mqtt_config.mqtt_gatewayuser_roles_query);
+        var query = mqtt_config.mqtt_gatewayuser_roles_query.replace("{1}", client.user);
+        console.warn("---------------query="+query);
+  
+        node.pgpool.query(query, (err, res) => {
+          console.warn("---------------query returned");
+  
+          if(res && res.rows && res.rows.length === 1){
+            console.warn("---------------query returned with single result");
+            var roles = res.rows[0].roles;
+            if(roles && roles.includes("gatewayuser.writer")){
+              return callback(null);
+            }          
+            if(roles && roles.includes("gatewayuser.writer."+packet.topic.substring("/api/gateway/".length))) {
+              return callback(null);
+            }
+          } 
+          return callback(new Error('wrong topic'))
+        });
+      }else if(client && !client.user && client.req && client.req.headers && client.req.headers.access_token ){
+        var query = mqtt_config.mqtt_loginuser_roles_query.replace("{1}", JSON.parse(client.req.headers.access_token).email);
+        console.warn("---------------query="+query);
+        node.pgpool.query(query, (err, res) => {
+          console.warn("---------------query returned");
+          if(res && res.rows && res.rows.length === 1){
+            console.warn("---------------query returned with single result");
+            var roles = res.rows[0].roles;
+            if(roles && (roles.includes("loginuser.admin"))){
+              console.warn("---------------authorizePublishHandler success" );
+              return callback(null);
+            }
+            if(roles && (roles.includes("loginuser.admin."+packet.topic.substring("/api/gateway/".length))) ) {
+              console.warn("---------------authorizePublishHandler success" );
+              return callback(null);
+            }
+          } 
+          return callback(new Error('wrong topic'))
+        });           
+      } else{
         return callback(new Error('wrong topic'))
-      });
+      }
     }
     // (client: Client, packet: PublishPacket, callback: (error?: Error | null) => void) => void
 
     const authorizeSubscribeHandler =function (client, subscription, callback) {
-      if(!client.user){
+      if(client && client.user){
         var query = mqtt_config.mqtt_gatewayuser_roles_query.replace("{1}", client.user);        
         console.warn("---------------query="+query);
         node.pgpool.query(query, (err, res) => {
@@ -198,10 +222,12 @@ module.exports = function (RED) {
           if(res && res.rows && res.rows.length === 1){
             console.warn("---------------query returned with single result");
             var roles = res.rows[0].roles;
-            if(roles && roles.includes("loginuser.viewer")){
+            if(roles && (roles.includes("loginuser.viewer") || roles.includes("loginuser.admin"))){
+              console.warn("---------------authorizeSubscribeHandler success" );
               return callback(null, subscription);
             }
-            if(roles && roles.includes("loginuser.viewer."+subscription.topic.substring("/api/gateway/".length))) {
+            if(roles && (roles.includes("loginuser.viewer."+subscription.topic.substring("/api/gateway/".length)) || roles.includes("loginuser.admin."+subscription.topic.substring("/api/gateway/".length))) ) {
+              console.warn("---------------authorizeSubscribeHandler success");
               return callback(null, subscription);
             }
           } 
