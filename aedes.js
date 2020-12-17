@@ -183,7 +183,7 @@ module.exports = function (RED) {
               console.warn("---------------authorizePublishHandler success" );
               return callback(null);
             }
-            if(roles && (roles.includes("loginuser.admin."+packet.topic.substring("/api/gateway/".length))) ) {
+            if(roles && (roles.includes("loginuser.admin."+packet.topic.substring("/api/mqtt/".length))) ) {
               console.warn("---------------authorizePublishHandler success" );
               return callback(null);
             }
@@ -226,7 +226,7 @@ module.exports = function (RED) {
               console.warn("---------------authorizeSubscribeHandler success" );
               return callback(null, subscription);
             }
-            if(roles && (roles.includes("loginuser.viewer."+subscription.topic.substring("/api/gateway/".length)) || roles.includes("loginuser.admin."+subscription.topic.substring("/api/gateway/".length))) ) {
+            if(roles && (roles.includes("loginuser.viewer."+subscription.topic.substring("/api/mqtt/".length)) || roles.includes("loginuser.admin."+subscription.topic.substring("/api/mqtt/".length))) ) {
               console.warn("---------------authorizeSubscribeHandler success");
               return callback(null, subscription);
             }
