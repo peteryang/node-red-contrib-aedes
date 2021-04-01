@@ -169,7 +169,7 @@ module.exports = function (RED) {
               return callback(null);
             }
           } 
-          return callback(new Error('wrong topic'))
+          return callback(new Error('wrong topic '+packet.topic))
         });
       }else if(client && !client.user && client.req && client.req.headers && client.req.headers.access_token ){
         var query = mqtt_config.mqtt_loginuser_roles_query.replace("{1}", JSON.parse(client.req.headers.access_token).email);
@@ -188,10 +188,10 @@ module.exports = function (RED) {
               return callback(null);
             }
           } 
-          return callback(new Error('wrong topic'))
+          return callback(new Error('wrong topic '+packet.topic))
         });           
       } else{
-        return callback(new Error('wrong topic'))
+        return callback(new Error('wrong topic '+packet.topic))
       }
     }
     // (client: Client, packet: PublishPacket, callback: (error?: Error | null) => void) => void
@@ -212,7 +212,7 @@ module.exports = function (RED) {
               return callback(null, subscription);
             }
           } 
-          return callback(new Error('wrong topic'));
+          return callback(new Error('wrong topic' + subscription.topic));
         });        
       }else if(client && !client.user && client.req && client.req.headers && client.req.headers.access_token ){
         var query = mqtt_config.mqtt_loginuser_roles_query.replace("{1}", JSON.parse(client.req.headers.access_token).email);
@@ -231,10 +231,10 @@ module.exports = function (RED) {
               return callback(null, subscription);
             }
           } 
-          return callback(new Error('wrong topic'))
+          return callback(new Error('wrong topic' + subscription.topic));
         });           
       } else{
-        return callback(new Error('wrong topic'))
+        return callback(new Error('wrong topic' + subscription.topic));
       }
 
 
