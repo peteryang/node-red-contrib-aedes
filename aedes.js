@@ -149,7 +149,7 @@ module.exports = function (RED) {
     const authorizePublishHandler = function (client, packet, callback) {
       if(client && client.user){
         if(node.rolesCache[client.user]){
-          roles = node.rolesCache[client.user];
+          var roles = node.rolesCache[client.user];
           if(roles && roles.includes("gatewayuser.writer")){
             return callback(null);
           }          
