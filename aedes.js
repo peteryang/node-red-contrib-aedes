@@ -50,6 +50,7 @@ module.exports = function (RED) {
     }
 
     this.pgpool = new pg.Pool(db_config);
+    this.rolesCache = {};
     const node = this;
 
 
@@ -115,34 +116,29 @@ module.exports = function (RED) {
       console.info("username = "+username);
       console.info("password = "+password);
       if(client && client.req && client.req.upgrade){
-        console.info("---------------websocket without checking");
+        console.info("websocket without checking");
         callback(null, true);
         return;
       }      
       if(!username || username.trim().length === 0){
-        // console.info("---------------username.trim()="+username.trim());
         callback(null, false);
         return;
       }
       if(!password || password.toString().trim().length === 0){
-        // console.info("---------------password.toString().trim()="+password.toString().trim());
         callback(null, false);
         return;
       }      
  
       var query = mqtt_config.mqtt_accesskey_query.replace("{1}", username);
-      // console.info("---------------query="+query);
 
       node.pgpool.query(query, (err, res) => {
-        // console.info("---------------query returned");
 
         if(res && res.rows && res.rows.length === 1){
-          // console.info("---------------query returned with single result");
           var authorized = (password.toString().trim() === res.rows[0].accesskey.trim());
-          if (authorized) { client.user = username; }
+          if (authorized) { client.user = username;  delete node.rolesCache[client.user]; }
           callback(null, authorized);
         }else{
-          console.warn("---------------query returned and cannot auth");
+          console.warn("cannot auth "+username);
           callback(null, false);
         }
       });
@@ -152,39 +148,42 @@ module.exports = function (RED) {
 
     const authorizePublishHandler = function (client, packet, callback) {
       if(client && client.user){
-        // console.info("---------------mqtt_config.mqtt_gatewayuser_roles_query="+mqtt_config.mqtt_gatewayuser_roles_query);
-        var query = mqtt_config.mqtt_gatewayuser_roles_query.replace("{1}", client.user);
-        // console.info("---------------query="+query);
-  
-        node.pgpool.query(query, (err, res) => {
-          // console.info("---------------query returned");
-  
-          if(res && res.rows && res.rows.length === 1){
-            // console.info("---------------query returned with single result");
-            var roles = res.rows[0].roles;
-            if(roles && roles.includes("gatewayuser.writer")){
-              return callback(null);
-            }          
-            if(roles && roles.includes("gatewayuser.writer."+packet.topic.substring("/api/gateway/".length))) {
-              return callback(null);
-            }
-          } 
-          return callback(new Error('wrong topic '+packet.topic))
-        });
+        if(node.rolesCache[client.user]){
+          roles = node.rolesCache[client.user];
+          if(roles && roles.includes("gatewayuser.writer")){
+            return callback(null);
+          }          
+          if(roles && roles.includes("gatewayuser.writer."+packet.topic.substring("/api/gateway/".length))) {
+            return callback(null);
+          }
+          return callback(new Error('wrong topic '+packet.topic));
+        }else{
+          var query = mqtt_config.mqtt_gatewayuser_roles_query.replace("{1}", client.user);
+    
+          node.pgpool.query(query, (err, res) => {
+    
+            if(res && res.rows && res.rows.length === 1){
+              var roles = res.rows[0].roles;
+              node.rolesCache[client.user] = roles;
+              if(roles && roles.includes("gatewayuser.writer")){
+                return callback(null);
+              }          
+              if(roles && roles.includes("gatewayuser.writer."+packet.topic.substring("/api/gateway/".length))) {
+                return callback(null);
+              }
+            } 
+            return callback(new Error('wrong topic '+packet.topic));
+          });          
+        }
       }else if(client && !client.user && client.req && client.req.headers && client.req.headers.access_token ){
         var query = mqtt_config.mqtt_loginuser_roles_query.replace("{1}", JSON.parse(client.req.headers.access_token).email);
-        // console.info("---------------query="+query);
         node.pgpool.query(query, (err, res) => {
-          // console.info("---------------query returned");
           if(res && res.rows && res.rows.length === 1){
-            // console.info("---------------query returned with single result");
             var roles = res.rows[0].roles;
             if(roles && (roles.includes("loginuser.admin"))){
-              // console.info("---------------authorizePublishHandler success" );
               return callback(null);
             }
             if(roles && (roles.includes("loginuser.admin."+packet.topic.substring("/api/mqtt/".length))) ) {
-              // console.info("---------------authorizePublishHandler success" );
               return callback(null);
             }
           } 
