@@ -153,7 +153,7 @@ module.exports = function (RED) {
           if(roles && roles.includes("gatewayuser.writer")){
             return callback(null);
           }          
-          if(roles && roles.includes("gatewayuser.writer."+packet.topic.substring("/api/gateway/".length))) {
+          if(roles && roles.includes("gatewayuser.writer."+(packet.topic.substring("/api/gateway/".length).replace(/\//g, ".")))) {
             return callback(null);
           }
           return callback(new Error('wrong topic '+packet.topic));
@@ -168,7 +168,7 @@ module.exports = function (RED) {
               if(roles && roles.includes("gatewayuser.writer")){
                 return callback(null);
               }          
-              if(roles && roles.includes("gatewayuser.writer."+packet.topic.substring("/api/gateway/".length))) {
+              if(roles && roles.includes("gatewayuser.writer."+(packet.topic.substring("/api/gateway/".length).replace(/\//g, ".")))) {
                 return callback(null);
               }
             } 
@@ -207,7 +207,7 @@ module.exports = function (RED) {
             if(roles && roles.includes("gatewayuser.reader")){
               return callback(null, subscription);
             }
-            if(roles && roles.includes("gatewayuser.reader."+subscription.topic.substring("/api/gateway/".length))) {
+            if(roles && roles.includes("gatewayuser.reader."+(subscription.topic.substring("/api/gateway/".length).replace(/\//g, ".")))) {
               return callback(null, subscription);
             }
           } 
